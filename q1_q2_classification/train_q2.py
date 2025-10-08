@@ -14,20 +14,19 @@ class ResNet(nn.Module):
         super().__init__()
 
         self.resnet = torchvision.models.resnet18(weights='IMAGENET1K_V1')
-        ##################################################################
-        # TODO: Define a FC layer here to process the features
-        ##################################################################
-        pass
+
+        num_features = self.resnet.fc.in_features
+        
+        self.resnet.fc = nn.Linear(num_features, num_classes)
         ##################################################################
         #                          END OF YOUR CODE                      #
         ##################################################################
         
 
     def forward(self, x):
-        ##################################################################
-        # TODO: Return raw outputs here
-        ##################################################################
-        pass
+
+        x = self.resnet(x)
+        return x
         ##################################################################
         #                          END OF YOUR CODE                      #
         ##################################################################
@@ -45,16 +44,16 @@ if __name__ == "__main__":
     # You should experiment and choose the correct hyperparameters
     # You should get a map of around 50 in 50 epochs
     ##################################################################
-    # args = ARGS(
-    #     epochs=50,
-    #     inp_size=64,
-    #     use_cuda=True,
-    #     val_every=70
-    #     lr=# TODO,
-    #     batch_size=#TODO,
-    #     step_size=#TODO,
-    #     gamma=#TODO
-    # )
+    args = ARGS(
+        epochs=50,
+        inp_size=224, 
+        use_cuda=True,
+        val_every=70,
+        lr=1e-4,  
+        batch_size=32,  
+        step_size=15,  
+        gamma=0.5  
+    )
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
@@ -73,9 +72,7 @@ if __name__ == "__main__":
     #                          END OF YOUR CODE                      #
     ##################################################################
 
-    # initializes Adam optimizer and simple StepLR scheduler
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
-    # trains model using your training code and reports test map
     test_ap, test_map = trainer.train(args, model, optimizer, scheduler)
     print('test map:', test_map)

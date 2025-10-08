@@ -1,0 +1,11 @@
+# === Data ===
+data/
+datasets/
+*.zip
+*.tar
+*.tar.gz
+*.npz
+*.npy
+*.pkl
+*.csv
+*.json

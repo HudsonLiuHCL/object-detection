@@ -1,5 +1,7 @@
 # This script downloads and extracts data to a specified folder 
 
+
+
 data_folder=data # TODO modify to where you want to store the data
 
 mkdir $data_folder
