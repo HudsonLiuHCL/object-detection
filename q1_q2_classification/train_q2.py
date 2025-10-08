@@ -7,29 +7,83 @@ import numpy as np
 import torchvision
 import torch.nn as nn
 import random
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from torch.utils.data import DataLoader, Subset
 
 
 class ResNet(nn.Module):
     def __init__(self, num_classes) -> None:
         super().__init__()
 
+        # Load pretrained ResNet18 on ImageNet
         self.resnet = torchvision.models.resnet18(weights='IMAGENET1K_V1')
-
         num_features = self.resnet.fc.in_features
-        
+
+        # Replace last layer for Pascal VOC (20 classes)
         self.resnet.fc = nn.Linear(num_features, num_classes)
-        ##################################################################
-        #                          END OF YOUR CODE                      #
-        ##################################################################
-        
 
     def forward(self, x):
-
         x = self.resnet(x)
         return x
-        ##################################################################
-        #                          END OF YOUR CODE                      #
-        ##################################################################
+
+
+def visualize_tsne(model_path='best_resnet18.pth', data_dir='data/VOCdevkit/VOC2007', size=224):
+    """Visualize 2D t-SNE of feature embeddings"""
+    from torchvision import models
+
+    print("Loading dataset...")
+    test_dataset = VOCDataset(split='test', size=size, data_dir=data_dir)
+    indices = random.sample(range(len(test_dataset)), 1000)
+    subset = Subset(test_dataset, indices)
+    loader = DataLoader(subset, batch_size=32, shuffle=False)
+
+    print("Loading trained ResNet18...")
+    model = models.resnet18(weights=None)
+    model.fc = nn.Identity()
+    model.load_state_dict(torch.load(model_path, map_location='cuda' if torch.cuda.is_available() else 'cpu'))
+    model = model.cuda().eval()
+
+    # Collect features + labels
+    features, labels = [], []
+    with torch.no_grad():
+        for imgs, lbls, _ in loader:
+            imgs = imgs.cuda()
+            feats = model(imgs).cpu().numpy()
+            features.append(feats)
+            labels.append(lbls.numpy())
+    features = np.concatenate(features)
+    labels = np.concatenate(labels)
+
+    print("Running t-SNE projection (this may take a few minutes)...")
+    tsne = TSNE(n_components=2, perplexity=30, n_iter=1000, init='pca', random_state=0)
+    features_2d = tsne.fit_transform(features)
+
+    # Assign colors for 20 Pascal classes
+    colors = np.array(list(mcolors.TABLEAU_COLORS.values()))[:20]
+
+    def get_color_for_label(label_vec):
+        active = np.where(label_vec == 1)[0]
+        if len(active) == 0:
+            return np.array([0.5, 0.5, 0.5])
+        return np.mean([mcolors.to_rgb(colors[i]) for i in active], axis=0)
+
+    point_colors = np.array([get_color_for_label(lbl) for lbl in labels])
+
+    plt.figure(figsize=(10, 8))
+    plt.scatter(features_2d[:, 0], features_2d[:, 1], c=point_colors, s=10)
+    plt.title('t-SNE Visualization of PASCAL Test Features')
+    plt.xlabel('t-SNE 1')
+    plt.ylabel('t-SNE 2')
+
+    # Legend
+    for i, cname in enumerate(VOCDataset.CLASS_NAMES):
+        plt.scatter([], [], color=colors[i], label=cname)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='small')
+    plt.tight_layout()
+    plt.savefig('tsne_pascal.png', dpi=300)
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -37,42 +91,28 @@ if __name__ == "__main__":
     torch.manual_seed(0)
     random.seed(0)
 
-    ##################################################################
-    # TODO: Create hyperparameter argument class
-    # We will use a size of 224x224 for the rest of the questions. 
-    # Note that you might have to change the augmentations
-    # You should experiment and choose the correct hyperparameters
-    # You should get a map of around 50 in 50 epochs
-    ##################################################################
     args = ARGS(
-        epochs=50,
-        inp_size=224, 
+        epochs=20,
+        inp_size=224,
         use_cuda=True,
         val_every=70,
-        lr=1e-4,  
-        batch_size=32,  
-        step_size=15,  
-        gamma=0.5  
+        lr=1e-4,
+        batch_size=32,
+        step_size=15,
+        gamma=0.5
     )
-    ##################################################################
-    #                          END OF YOUR CODE                      #
-    ##################################################################
-    
-    print(args)
 
-    ##################################################################
-    # TODO: Define a ResNet-18 model (https://arxiv.org/pdf/1512.03385.pdf) 
-    # Initialize this model with ImageNet pre-trained weights
-    # (except the last layer). You are free to use torchvision.models 
-    ##################################################################
+    print(args)
 
     model = ResNet(len(VOCDataset.CLASS_NAMES)).to(args.device)
 
-    ##################################################################
-    #                          END OF YOUR CODE                      #
-    ##################################################################
-
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
+
+    # Train the model
     test_ap, test_map = trainer.train(args, model, optimizer, scheduler)
     print('test map:', test_map)
+
+    # Optional: visualize t-SNE after training
+    # Save checkpoint as best_resnet18.pth first, then:
+    # visualize_tsne('best_resnet18.pth')
