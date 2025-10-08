@@ -87,32 +87,32 @@ def visualize_tsne(model_path='best_resnet18.pth', data_dir='data/VOCdevkit/VOC2
 
 
 if __name__ == "__main__":
-    # np.random.seed(0)
-    # torch.manual_seed(0)
-    # random.seed(0)
+    np.random.seed(0)
+    torch.manual_seed(0)
+    random.seed(0)
 
-    # args = ARGS(
-    #     epochs=20,
-    #     inp_size=224,
-    #     use_cuda=True,
-    #     val_every=70,
-    #     lr=1e-4,
-    #     batch_size=32,
-    #     step_size=15,
-    #     gamma=0.5
-    # )
+    args = ARGS(
+        epochs=20,
+        inp_size=224,
+        use_cuda=True,
+        val_every=70,
+        lr=1e-4,
+        batch_size=32,
+        step_size=15,
+        gamma=0.5
+    )
 
-    # print(args)
+    print(args)
 
-    # model = ResNet(len(VOCDataset.CLASS_NAMES)).to(args.device)
+    model = ResNet(len(VOCDataset.CLASS_NAMES)).to(args.device)
 
-    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
-    # # Train the model
+    # Train the model
     # test_ap, test_map = trainer.train(args, model, optimizer, scheduler)
     # print('test map:', test_map)
 
-    # # Optional: visualize t-SNE after training
-    # # Save checkpoint as best_resnet18.pth first, then:
+    # Optional: visualize t-SNE after training
+    # Save checkpoint as best_resnet18.pth first, then:
     visualize_tsne('best_resnet18.pth')
