@@ -166,15 +166,22 @@ def detection_visualizer(img, idx_to_class, bbox=None, pred=None, points=None):
                     color=(1, 1, 1),
                     zorder=10,
                 )
-    # fmt:
+    # fmt: on
+    
     ax.margins(0)
     fig.canvas.draw()
+    
+    # Fixed: tostring_argb() returns ARGB (4 channels), need to handle correctly
     image_from_plot = np.frombuffer(fig.canvas.tostring_argb(), dtype=np.uint8)
-    image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-
+    w, h = fig.canvas.get_width_height()
+    image_from_plot = image_from_plot.reshape(h, w, 4)
+    
+    # Convert ARGB to RGB by dropping the alpha channel and reordering
+    # ARGB format has channels in order: A, R, G, B
+    image_from_plot = image_from_plot[:, :, 1:]  # Drop alpha, keep RGB
+    
+    # Return in CHW format for PyTorch
     return image_from_plot.transpose(2, 0, 1)
-
-
 
 
 def decode_captions(captions, idx_to_word):
