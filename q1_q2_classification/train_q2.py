@@ -115,4 +115,4 @@ if __name__ == "__main__":
 
     # Optional: visualize t-SNE after training
     # Save checkpoint as best_resnet18.pth first, then:
-    visualize_tsne('best_resnet18.pth')
+    # visualize_tsne('best_resnet18.pth')
