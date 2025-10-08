@@ -30,7 +30,7 @@ class ResNet(nn.Module):
 
 
 def visualize_tsne(model_path='best_resnet18.pth', data_dir='data/VOCdevkit/VOC2007', size=224):
-    """Visualize 2D t-SNE of feature embeddings"""
+    """Visualize 2D t-SNE of feature embeddings for PASCAL VOC."""
     from torchvision import models
 
     print("Loading dataset...")
@@ -40,12 +40,19 @@ def visualize_tsne(model_path='best_resnet18.pth', data_dir='data/VOCdevkit/VOC2
     loader = DataLoader(subset, batch_size=32, shuffle=False)
 
     print("Loading trained ResNet18...")
+    checkpoint = torch.load(model_path, map_location='cuda' if torch.cuda.is_available() else 'cpu')
+
+    # Strip "resnet." prefix from keys in state_dict if present
+    state_dict = {k.replace('resnet.', ''): v for k, v in checkpoint.items()}
+
     model = models.resnet18(weights=None)
     model.fc = nn.Identity()
-    model.load_state_dict(torch.load(model_path, map_location='cuda' if torch.cuda.is_available() else 'cpu'))
+
+    # Load weights safely
+    model.load_state_dict(state_dict, strict=False)
     model = model.cuda().eval()
 
-    # Collect features + labels
+    # Collect features and labels
     features, labels = [], []
     with torch.no_grad():
         for imgs, lbls, _ in loader:
@@ -53,6 +60,7 @@ def visualize_tsne(model_path='best_resnet18.pth', data_dir='data/VOCdevkit/VOC2
             feats = model(imgs).cpu().numpy()
             features.append(feats)
             labels.append(lbls.numpy())
+
     features = np.concatenate(features)
     labels = np.concatenate(labels)
 
@@ -66,7 +74,7 @@ def visualize_tsne(model_path='best_resnet18.pth', data_dir='data/VOCdevkit/VOC2
     def get_color_for_label(label_vec):
         active = np.where(label_vec == 1)[0]
         if len(active) == 0:
-            return np.array([0.5, 0.5, 0.5])
+            return np.array([0.5, 0.5, 0.5])  # gray for background
         return np.mean([mcolors.to_rgb(colors[i]) for i in active], axis=0)
 
     point_colors = np.array([get_color_for_label(lbl) for lbl in labels])
@@ -77,13 +85,15 @@ def visualize_tsne(model_path='best_resnet18.pth', data_dir='data/VOCdevkit/VOC2
     plt.xlabel('t-SNE 1')
     plt.ylabel('t-SNE 2')
 
-    # Legend
+    # Legend mapping from color to class name
     for i, cname in enumerate(VOCDataset.CLASS_NAMES):
         plt.scatter([], [], color=colors[i], label=cname)
+
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='small')
     plt.tight_layout()
     plt.savefig('tsne_pascal.png', dpi=300)
     plt.show()
+
 
 
 if __name__ == "__main__":
