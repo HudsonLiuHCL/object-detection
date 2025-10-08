@@ -79,26 +79,26 @@ class VOCDataset(Dataset):
 
 
     def get_random_augmentations(self):
-        ######################################################################
-        # Return a list of random data augmentation transforms
-        ######################################################################
+        # ######################################################################
+        # # Return a list of random data augmentation transforms
+        # ######################################################################
 
-        if self.split in ['train', 'trainval']:
-            # Data augmentations for training
-            # Removed hue parameter to avoid overflow issues with certain PIL/numpy versions
-            return [
-                transforms.RandomResizedCrop(self.size, scale=(0.6, 1.0)),
-                transforms.RandomHorizontalFlip(p=0.5),
-                transforms.ColorJitter(
-                    brightness=0.2, 
-                    contrast=0.2, 
-                    saturation=0.2
-                    # hue removed due to overflow issues in some environments
-                ),
-            ]
-        else:
-            # No random augmentation for validation/test
-            return [transforms.CenterCrop(self.size)]
+        # if self.split in ['train', 'trainval']:
+        #     # Data augmentations for training
+        #     # Removed hue parameter to avoid overflow issues with certain PIL/numpy versions
+        #     return [
+        #         transforms.RandomResizedCrop(self.size, scale=(0.6, 1.0)),
+        #         transforms.RandomHorizontalFlip(p=0.5),
+        #         transforms.ColorJitter(
+        #             brightness=0.2, 
+        #             contrast=0.2, 
+        #             saturation=0.2
+        #             # hue removed due to overflow issues in some environments
+        #         ),
+        #     ]
+        # else:
+        #     # No random augmentation for validation/test
+        return [transforms.CenterCrop(self.size)]
 
 
 
