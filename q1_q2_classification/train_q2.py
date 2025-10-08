@@ -65,7 +65,7 @@ def visualize_tsne(model_path='best_resnet18.pth', data_dir='data/VOCdevkit/VOC2
     labels = np.concatenate(labels)
 
     print("Running t-SNE projection (this may take a few minutes)...")
-    tsne = TSNE(n_components=2, perplexity=30, n_iter=1000, init='pca', random_state=0)
+    tsne = TSNE(n_components=2, perplexity=30, max_iter=1000, init='pca', random_state=0)
     features_2d = tsne.fit_transform(features)
 
     # Assign colors for 20 Pascal classes
