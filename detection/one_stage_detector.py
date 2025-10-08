@@ -475,9 +475,6 @@ class FCOS(nn.Module):
         # Extract GT class labels from matched boxes
         gt_classes = matched_gt_boxes[:, :, 4].long()  # (B, num_locations)
         
-        # Compute centerness targets from deltas
-        centerness_targets = fcos_make_centerness_targets(matched_gt_deltas)  # (B, num_locations)
-        
         # Foreground mask: locations with valid GT boxes (class >= 0)
         foreground_mask = gt_classes >= 0  # (B, num_locations)
         
@@ -503,6 +500,13 @@ class FCOS(nn.Module):
         loss_box[~foreground_mask] = 0.0  # Zero out background
         
         # Centerness loss (BCE loss)
+        # Compute centerness targets from deltas
+        # matched_gt_deltas is (B, num_locations, 4), reshape for centerness computation
+        B, N, _ = matched_gt_deltas.shape
+        centerness_targets = fcos_make_centerness_targets(
+            matched_gt_deltas.view(-1, 4)
+        ).view(B, N)  # (B, num_locations)
+        
         # Only compute for foreground locations
         # Squeeze the last dimension of pred_ctr_logits: (B, num_locations, 1) -> (B, num_locations)
         loss_ctr = F.binary_cross_entropy_with_logits(

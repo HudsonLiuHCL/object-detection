@@ -110,8 +110,33 @@ def fcos_get_deltas_from_locations(
 ) -> torch.Tensor:
     """
     Compute distances from feature locations to GT box edges. These distances
-    are called "deltas" - `(left, top, right, bottom)` or simply `LTRB`.
+    are called "deltas" - `(left, top, right, bottom)` or simply `LTRB`. The
+    feature locations and GT boxes are given in absolute image co-ordinates.
+
+    These deltas are used as targets for training FCOS to perform box regression
+    and centerness regression. They must be "normalized" by the stride of FPN
+    feature map (from which feature locations were computed, see the function
+    `get_fpn_location_coords`). If GT boxes are "background", then deltas must
+    be `(-1, -1, -1, -1)`.
+
+    NOTE: This transformation function should not require GT class label. Your
+    implementation must work for GT boxes being `(N, 4)` or `(N, 5)` tensors -
+    without or with class labels respectively. You may assume that all the
+    background boxes will be `(-1, -1, -1, -1)` or `(-1, -1, -1, -1, -1)`.
+
+    Args:
+        locations: Tensor of shape `(N, 2)` giving `(xc, yc)` feature locations.
+        gt_boxes: Tensor of shape `(N, 4 or 5)` giving GT boxes.
+        stride: Stride of the FPN feature map.
+
+    Returns:
+        torch.Tensor
+            Tensor of shape `(N, 4)` giving deltas from feature locations, that
+            are normalized by feature stride.
     """
+    ##########################################################################
+    # Compute LTRB deltas from locations to GT box edges
+    ##########################################################################
     x_center = locations[:, 0]
     y_center = locations[:, 1]
     
@@ -127,8 +152,10 @@ def fcos_get_deltas_from_locations(
     
     deltas = torch.stack([left, top, right, bottom], dim=1)
 
+    # Normalize by stride
     deltas = deltas / stride
     
+    # Set background boxes (with -1 values) to have -1 deltas
     background_mask = (gt_boxes[:, 0] < 0)
     deltas[background_mask, :] = -1
     
@@ -138,19 +165,49 @@ def fcos_get_deltas_from_locations(
 def fcos_apply_deltas_to_locations(
     deltas: torch.Tensor, locations: torch.Tensor, stride: int
 ) -> torch.Tensor:
+    """
+    Implement the inverse of `fcos_get_deltas_from_locations` here:
 
+    Given edge deltas (left, top, right, bottom) and feature locations of FPN, get
+    the resulting bounding box co-ordinates by applying deltas on locations. This
+    method is used for inference in FCOS: deltas are outputs from model, and
+    applying them to anchors will give us final box predictions.
+
+    Recall in above method, we were required to normalize the deltas by feature
+    stride. Similarly, we have to un-normalize the input deltas with feature
+    stride before applying them to locations, because the given input locations are
+    already absolute co-ordinates in image dimensions.
+
+    Args:
+        deltas: Tensor of shape `(N, 4)` giving edge deltas to apply to locations.
+        locations: Locations to apply deltas on. shape: `(N, 2)`
+        stride: Stride of the FPN feature map.
+
+    Returns:
+        torch.Tensor
+            Same shape as deltas and locations, giving co-ordinates of the
+            resulting boxes `(x1, y1, x2, y2)`, absolute in image dimensions.
+    """
+    ##########################################################################
+    # Apply deltas to locations to get boxes
+    ##########################################################################
+    # Un-normalize deltas by multiplying with stride
     deltas_unnorm = deltas * stride
 
+    # Clip deltas to be non-negative (center must be inside box)
     deltas_unnorm = torch.clamp(deltas_unnorm, min=0)
     
+    # Extract location coordinates
     x_center = locations[:, 0]
     y_center = locations[:, 1]
 
+    # Extract deltas: (left, top, right, bottom)
     left = deltas_unnorm[:, 0]
     top = deltas_unnorm[:, 1]
     right = deltas_unnorm[:, 2]
     bottom = deltas_unnorm[:, 3]
 
+    # Compute box coordinates: (x1, y1, x2, y2)
     x1 = x_center - left
     y1 = y_center - top
     x2 = x_center + right
@@ -161,12 +218,26 @@ def fcos_apply_deltas_to_locations(
     return output_boxes
 
 
-
 def fcos_make_centerness_targets(deltas: torch.Tensor):
     """
-    Compute centerness targets from LTRB deltas.
-    Centerness = sqrt((min(l,r) * min(t,b)) / (max(l,r) * max(t,b)))
+    Given LTRB deltas of GT boxes, compute GT targets for supervising the
+    centerness regression predictor. See `fcos_get_deltas_from_locations` on
+    how deltas are computed. If GT boxes are "background" => deltas are
+    `(-1, -1, -1, -1)`, then centerness should be `-1`.
+
+    For reference, centerness equation is available in FCOS paper
+    https://arxiv.org/abs/1904.01355 (Equation 3).
+
+    Args:
+        deltas: Tensor of shape `(N, 4)` giving LTRB deltas for GT boxes.
+
+    Returns:
+        torch.Tensor
+            Tensor of shape `(N, )` giving centerness regression targets.
     """
+    ##########################################################################
+    # Compute centerness targets
+    ##########################################################################
     left = deltas[:, 0]
     top = deltas[:, 1]
     right = deltas[:, 2]
@@ -177,8 +248,10 @@ def fcos_make_centerness_targets(deltas: torch.Tensor):
     tb_min = torch.min(top, bottom)
     tb_max = torch.max(top, bottom)
     
+    # Avoid division by zero
     centerness = torch.sqrt((lr_min * tb_min) / (lr_max * tb_max + 1e-8))
     
+    # Set centerness to -1 for background boxes (where deltas are -1)
     background_mask = (deltas[:, 0] < 0)
     centerness[background_mask] = -1
     
@@ -192,27 +265,54 @@ def get_fpn_location_coords(
     device: str = "cpu",
 ) -> Dict[str, torch.Tensor]:
     """
-    Map every location in FPN feature map to a point on the image.
+    Map every location in FPN feature map to a point on the image. This point
+    represents the center of the receptive field of this location. We need to
+    do this for having a uniform co-ordinate representation of all the locations
+    across FPN levels, and GT boxes.
+
+    Args:
+        shape_per_fpn_level: Shape of the FPN feature level, dictionary of keys
+            {"p3", "p4", "p5"} and feature shapes `(B, C, H, W)` as values.
+        strides_per_fpn_level: Dictionary of same keys as above, each with an
+            integer value giving the stride of corresponding FPN level.
+            See `backbone.py` for more details.
+
+    Returns:
+        Dict[str, torch.Tensor]
+            Dictionary with same keys as `shape_per_fpn_level` and values as
+            tensors of shape `(H * W, 2)` giving `(xc, yc)` co-ordinates of the
+            centers of receptive fields of the FPN locations, on input image.
     """
+
+    # Set these to `(N, 2)` Tensors giving absolute location co-ordinates.
     location_coords = {
         level_name: None for level_name, _ in shape_per_fpn_level.items()
     }
 
     for level_name, feat_shape in shape_per_fpn_level.items():
         level_stride = strides_per_fpn_level[level_name]
-        
+        ##################################################################
+        # Get location coordinates
+        ##################################################################
+        # feat_shape is (B, C, H, W)
         _, _, H, W = feat_shape
         
-
+        # Create grid of coordinates in feature map space
+        # Each location is at the center of its receptive field
+        # Offset by stride/2 to get the center
         shift_x = (torch.arange(0, W, dtype=dtype, device=device) + 0.5) * level_stride
         shift_y = (torch.arange(0, H, dtype=dtype, device=device) + 0.5) * level_stride
         
+        # Create meshgrid
         shift_y, shift_x = torch.meshgrid(shift_y, shift_x, indexing='ij')
         
+        # Flatten and stack to get (H*W, 2) tensor of (x, y) coordinates
         shift_x = shift_x.reshape(-1)
         shift_y = shift_y.reshape(-1)
         location_coords[level_name] = torch.stack([shift_x, shift_y], dim=1)
-    
+        ##################################################################
+        #                             END OF YOUR CODE                   #
+        ##################################################################
     return location_coords
 
 def class_spec_nms(
