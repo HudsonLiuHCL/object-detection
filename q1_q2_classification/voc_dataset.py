@@ -85,11 +85,15 @@ class VOCDataset(Dataset):
 
         if self.split in ['train', 'trainval']:
             # Data augmentations for training
+            # Note: hue parameter must be in [-0.5, 0.5], using smaller values
             return [
                 transforms.RandomResizedCrop(self.size, scale=(0.6, 1.0)),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.ColorJitter(
-                    brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05
+                    brightness=0.2, 
+                    contrast=0.2, 
+                    saturation=0.2, 
+                    hue=0.02  # Changed from 0.05 to 0.02 to avoid overflow
                 ),
             ]
         else:
@@ -111,6 +115,10 @@ class VOCDataset(Dataset):
         fpath = os.path.join(self.img_dir, findex + '.jpg')
 
         img = Image.open(fpath)
+        
+        # Convert grayscale images to RGB
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
 
         trans = transforms.Compose([
             transforms.Resize(self.size),

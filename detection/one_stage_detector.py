@@ -496,15 +496,17 @@ class FCOS(nn.Module):
         
         # Box regression loss (L1 loss)
         # Only compute for foreground locations
-        loss_box = F.l1_loss(
+        # Multiply by 0.25 to average across four LTRB components
+        loss_box = 0.25 * F.l1_loss(
             pred_boxreg_deltas, matched_gt_deltas, reduction='none'
         ).sum(dim=2)  # Sum over 4 coordinates -> (B, num_locations)
         loss_box[~foreground_mask] = 0.0  # Zero out background
         
         # Centerness loss (BCE loss)
         # Only compute for foreground locations
+        # Squeeze the last dimension of pred_ctr_logits: (B, num_locations, 1) -> (B, num_locations)
         loss_ctr = F.binary_cross_entropy_with_logits(
-            pred_ctr_logits.squeeze(2), centerness_targets, reduction='none'
+            pred_ctr_logits.squeeze(-1), centerness_targets, reduction='none'
         )  # (B, num_locations)
         loss_ctr[~foreground_mask] = 0.0  # Zero out background
 
