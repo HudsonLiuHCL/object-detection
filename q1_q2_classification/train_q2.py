@@ -69,7 +69,8 @@ def visualize_tsne(model_path='best_resnet18.pth', data_dir='data/VOCdevkit/VOC2
     features_2d = tsne.fit_transform(features)
 
     # Assign colors for 20 Pascal classes
-    colors = np.array(list(mcolors.TABLEAU_COLORS.values()))[:20]
+    base_colors = list(mcolors.TABLEAU_COLORS.values())
+    colors = np.array([base_colors[i % len(base_colors)] for i in range(20)])
 
     def get_color_for_label(label_vec):
         active = np.where(label_vec == 1)[0]
